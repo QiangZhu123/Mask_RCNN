@@ -31,7 +31,7 @@ COCO_MODEL_URL = "https://github.com/matterport/Mask_RCNN/releases/download/v2.0
 #  Bounding Boxes
 ############################################################
 
-def extract_bboxes(mask):
+def extract_bboxes(mask):#将mask变成boxes
     """Compute bounding boxes from masks.
     mask: [height, width, num_instances]. Mask pixels are either 1 or 0.
 
@@ -46,7 +46,7 @@ def extract_bboxes(mask):
         if horizontal_indicies.shape[0]:
             x1, x2 = horizontal_indicies[[0, -1]]
             y1, y2 = vertical_indicies[[0, -1]]
-            # x2 and y2 should not be part of the box. Increment by 1.
+            # x2 and y2 should not be part of the box. Increment by 1.+1变大点
             x2 += 1
             y2 += 1
         else:
@@ -57,7 +57,7 @@ def extract_bboxes(mask):
     return boxes.astype(np.int32)
 
 
-def compute_iou(box, boxes, box_area, boxes_area):
+def compute_iou(box, boxes, box_area, boxes_area):#计算一个box和一群boxes的iou
     """Calculates IoU of the given box with the array of the given boxes.
     box: 1D vector [y1, x1, y2, x2]
     boxes: [boxes_count, (y1, x1, y2, x2)]
@@ -78,7 +78,7 @@ def compute_iou(box, boxes, box_area, boxes_area):
     return iou
 
 
-def compute_overlaps(boxes1, boxes2):
+def compute_overlaps(boxes1, boxes2):#计算两个不同boxes的所有相互之间的iou，生成一个矩阵
     """Computes IoU overlaps between two sets of boxes.
     boxes1, boxes2: [N, (y1, x1, y2, x2)].
 
@@ -97,7 +97,7 @@ def compute_overlaps(boxes1, boxes2):
     return overlaps
 
 
-def compute_overlaps_masks(masks1, masks2):
+def compute_overlaps_masks(masks1, masks2):#计算两个mask之间的iou
     """Computes IoU overlaps between two sets of masks.
     masks1, masks2: [Height, Width, instances]
     """
@@ -119,7 +119,7 @@ def compute_overlaps_masks(masks1, masks2):
     return overlaps
 
 
-def non_max_suppression(boxes, scores, threshold):
+def non_max_suppression(boxes, scores, threshold):#非极大抑制
     """Performs non-maximum suppression and returns indices of kept boxes.
     boxes: [N, (y1, x1, y2, x2)]. Notice that (y2, x2) lays outside the box.
     scores: 1-D array of box scores.
@@ -156,7 +156,7 @@ def non_max_suppression(boxes, scores, threshold):
     return np.array(pick, dtype=np.int32)
 
 
-def apply_box_deltas(boxes, deltas):
+def apply_box_deltas(boxes, deltas):#将deltas加到boxes上，使用计算公式处理
     """Applies the given deltas to the given boxes.
     boxes: [N, (y1, x1, y2, x2)]. Note that (y2, x2) is outside the box.
     deltas: [N, (dy, dx, log(dh), log(dw))]
@@ -180,28 +180,28 @@ def apply_box_deltas(boxes, deltas):
     return np.stack([y1, x1, y2, x2], axis=1)
 
 
-def box_refinement_graph(box, gt_box):
+def box_refinement_graph(box, gt_box):#计算gt_box和box之间的差距，也就是真实需要预测的偏移
     """Compute refinement needed to transform box to gt_box.
     box and gt_box are [N, (y1, x1, y2, x2)]
     """
     box = tf.cast(box, tf.float32)
     gt_box = tf.cast(gt_box, tf.float32)
-
+    #box生成
     height = box[:, 2] - box[:, 0]
     width = box[:, 3] - box[:, 1]
     center_y = box[:, 0] + 0.5 * height
     center_x = box[:, 1] + 0.5 * width
-
+    #gt_box生成
     gt_height = gt_box[:, 2] - gt_box[:, 0]
     gt_width = gt_box[:, 3] - gt_box[:, 1]
     gt_center_y = gt_box[:, 0] + 0.5 * gt_height
     gt_center_x = gt_box[:, 1] + 0.5 * gt_width
-
+    #计算差距
     dy = (gt_center_y - center_y) / height
     dx = (gt_center_x - center_x) / width
     dh = tf.log(gt_height / height)
     dw = tf.log(gt_width / width)
-
+    #结果组合
     result = tf.stack([dy, dx, dh, dw], axis=1)
     return result
 
@@ -211,7 +211,7 @@ def box_refinement(box, gt_box):
     box and gt_box are [N, (y1, x1, y2, x2)]. (y2, x2) is
     assumed to be outside the box.
     """
-    box = box.astype(np.float32)
+    box = box.astype(np.float32)#只有这里和上面的不一样
     gt_box = gt_box.astype(np.float32)
 
     height = box[:, 2] - box[:, 0]
@@ -580,7 +580,7 @@ def unmold_mask(mask, bbox, image_shape):
 #  Anchors
 ############################################################
 
-def generate_anchors(scales, ratios, shape, feature_stride, anchor_stride):
+def generate_anchors(scales, ratios, shape, feature_stride, anchor_stride):#生成大量的anchor
     """
     scales: 1D array of anchor sizes in pixels. Example: [32, 64, 128]
     ratios: 1D array of anchor ratios of width/height. Example: [0.5, 1, 2]
