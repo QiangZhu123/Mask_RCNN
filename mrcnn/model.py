@@ -234,7 +234,7 @@ def apply_box_deltas_graph(boxes, deltas):
     return result
 
 
-def clip_boxes_graph(boxes, window):
+def clip_boxes_graph(boxes, window):#window=[0,0,1,1],window就是图片的标准化左上和右下，那么这就是box在图片中裁剪的结果
     """
     boxes: [N, (y1, x1, y2, x2)]
     window: [4] in the form y1, x1, y2, x2
@@ -252,12 +252,12 @@ def clip_boxes_graph(boxes, window):
     return clipped
 
 
-class ProposalLayer(KE.Layer):
-    """Receives anchor scores and selects a subset to pass as proposals
-    to the second stage. Filtering is done based on anchor scores and
+class ProposalLayer(KE.Layer):#提议处理层
+    """Receives anchor scores and selects a subset to pass as proposals收到anchor分数，筛选一些anchor，用iou和非极大抑制两种，同时
+    to the second stage. Filtering is done based on anchor scores and   对boxes使用delta
     non-max suppression to remove overlaps. It also applies bounding
     box refinement deltas to anchors.
-
+	
     Inputs:
         rpn_probs: [batch, num_anchors, (bg prob, fg prob)]
         rpn_bbox: [batch, num_anchors, (dy, dx, log(dh), log(dw))]
@@ -270,12 +270,12 @@ class ProposalLayer(KE.Layer):
     def __init__(self, proposal_count, nms_threshold, config=None, **kwargs):
         super(ProposalLayer, self).__init__(**kwargs)
         self.config = config
-        self.proposal_count = proposal_count
-        self.nms_threshold = nms_threshold
+        self.proposal_count = proposal_count#2000
+        self.nms_threshold = nms_threshold#0.7
 
-    def call(self, inputs):
-        # Box Scores. Use the foreground class confidence. [Batch, num_rois, 1]
-        scores = inputs[0][:, :, 1]
+    def call(self, inputs):#输入是[rpn_class, rpn_bbox, anchors]anchors是生成的anchors
+        # Box Scores. Use the foreground class confidence. [Batch, num_rois, 1]这个是前景，还有背景分数，所以输入是两个，这里只取一个
+        scores = inputs[0][:, :, 1]#前景分数
         # Box deltas [batch, num_rois, 4]
         deltas = inputs[1]
         deltas = deltas * np.reshape(self.config.RPN_BBOX_STD_DEV, [1, 1, 4])
@@ -284,23 +284,23 @@ class ProposalLayer(KE.Layer):
 
         # Improve performance by trimming to top anchors by score
         # and doing the rest on the smaller subset.
-        pre_nms_limit = tf.minimum(self.config.PRE_NMS_LIMIT, tf.shape(anchors)[1])
+        pre_nms_limit = tf.minimum(self.config.PRE_NMS_LIMIT, tf.shape(anchors)[1])#根据要求看是否有anchors数量的限制
         ix = tf.nn.top_k(scores, pre_nms_limit, sorted=True,
-                         name="top_anchors").indices
+                         name="top_anchors").indices#选出anchors分数中前pre_num_limits个anchors，第一次筛选
         scores = utils.batch_slice([scores, ix], lambda x, y: tf.gather(x, y),
-                                   self.config.IMAGES_PER_GPU)
+                                   self.config.IMAGES_PER_GPU)#这里的batch_slice是对给定的内容使用指定的函数的方法，从scores中提取出第一次筛选结果
         deltas = utils.batch_slice([deltas, ix], lambda x, y: tf.gather(x, y),
-                                   self.config.IMAGES_PER_GPU)
+                                   self.config.IMAGES_PER_GPU)#同上，从delta忠提取出第一次筛选结果 
         pre_nms_anchors = utils.batch_slice([anchors, ix], lambda a, x: tf.gather(a, x),
                                     self.config.IMAGES_PER_GPU,
-                                    names=["pre_nms_anchors"])
+                                    names=["pre_nms_anchors"])#从anchors中筛选出第一次结果
 
         # Apply deltas to anchors to get refined anchors.
         # [batch, N, (y1, x1, y2, x2)]
         boxes = utils.batch_slice([pre_nms_anchors, deltas],
                                   lambda x, y: apply_box_deltas_graph(x, y),
                                   self.config.IMAGES_PER_GPU,
-                                  names=["refined_anchors"])
+                                  names=["refined_anchors"])#将deltas量加到anchors上，delta是预测值，anchors是筛选值剩下的，加上后就是RPN了
 
         # Clip to image boundaries. Since we're in normalized coordinates,
         # clip to 0..1 range. [batch, N, (y1, x1, y2, x2)]
@@ -308,7 +308,7 @@ class ProposalLayer(KE.Layer):
         boxes = utils.batch_slice(boxes,
                                   lambda x: clip_boxes_graph(x, window),
                                   self.config.IMAGES_PER_GPU,
-                                  names=["refined_anchors_clipped"])
+                                  names=["refined_anchors_clipped"])#用box在图片中裁剪的结果
 
         # Filter out small boxes
         # According to Xinlei Chen's paper, this reduces detection accuracy
@@ -325,7 +325,7 @@ class ProposalLayer(KE.Layer):
             proposals = tf.pad(proposals, [(0, padding), (0, 0)])
             return proposals
         proposals = utils.batch_slice([boxes, scores], nms,
-                                      self.config.IMAGES_PER_GPU)
+                                      self.config.IMAGES_PER_GPU)#第二次筛选，用nms
         return proposals
 
     def compute_output_shape(self, input_shape):
@@ -454,7 +454,7 @@ class PyramidROIAlign(KE.Layer):
 #  Detection Target Layer
 ############################################################
 
-def overlaps_graph(boxes1, boxes2):
+def overlaps_graph(boxes1, boxes2):#两个boxes的相互iou
     """Computes IoU overlaps between two sets of boxes.
     boxes1, boxes2: [N, (y1, x1, y2, x2)].
     """
@@ -489,7 +489,7 @@ def detection_targets_graph(proposals, gt_class_ids, gt_boxes, gt_masks, config)
 
     Inputs:
     proposals: [POST_NMS_ROIS_TRAINING, (y1, x1, y2, x2)] in normalized coordinates. Might
-               be zero padded if there are not enough proposals.
+               be zero padded if there are not enough proposals.如果不够就用0pad作为提议
     gt_class_ids: [MAX_GT_INSTANCES] int class IDs
     gt_boxes: [MAX_GT_INSTANCES, (y1, x1, y2, x2)] in normalized coordinates.
     gt_masks: [height, width, MAX_GT_INSTANCES] of boolean type.
@@ -513,12 +513,12 @@ def detection_targets_graph(proposals, gt_class_ids, gt_boxes, gt_masks, config)
         proposals = tf.identity(proposals)
 
     # Remove zero padding
-    proposals, _ = trim_zeros_graph(proposals, name="trim_proposals")
+    proposals, _ = trim_zeros_graph(proposals, name="trim_proposals")#去掉proposals中用0pad的部分
     gt_boxes, non_zeros = trim_zeros_graph(gt_boxes, name="trim_gt_boxes")
     gt_class_ids = tf.boolean_mask(gt_class_ids, non_zeros,
                                    name="trim_gt_class_ids")
     gt_masks = tf.gather(gt_masks, tf.where(non_zeros)[:, 0], axis=2,
-                         name="trim_gt_masks")
+                         name="trim_gt_masks")#提取出GT中的mask
 
     # Handle COCO crowds
     # A crowd box in COCO is a bounding box around several instances. Exclude
@@ -531,37 +531,37 @@ def detection_targets_graph(proposals, gt_class_ids, gt_boxes, gt_masks, config)
     gt_masks = tf.gather(gt_masks, non_crowd_ix, axis=2)
 
     # Compute overlaps matrix [proposals, gt_boxes]
-    overlaps = overlaps_graph(proposals, gt_boxes)
+    overlaps = overlaps_graph(proposals, gt_boxes)#生成proposals和GT之间相互的iou
 
     # Compute overlaps with crowd boxes [proposals, crowd_boxes]
-    crowd_overlaps = overlaps_graph(proposals, crowd_boxes)
-    crowd_iou_max = tf.reduce_max(crowd_overlaps, axis=1)
+    crowd_overlaps = overlaps_graph(proposals, crowd_boxes)#生成proposals和GT之间相互的iou
+    crowd_iou_max = tf.reduce_max(crowd_overlaps, axis=1)#挑选出那些重叠严重部分的iou
     no_crowd_bool = (crowd_iou_max < 0.001)
 
     # Determine positive and negative ROIs
-    roi_iou_max = tf.reduce_max(overlaps, axis=1)
-    # 1. Positive ROIs are those with >= 0.5 IoU with a GT box
+    roi_iou_max = tf.reduce_max(overlaps, axis=1)#降维
+    # 1. Positive ROIs are those with >= 0.5 IoU with a GT box给ROI打标签，和GT的iou在0.5以上的为正
     positive_roi_bool = (roi_iou_max >= 0.5)
     positive_indices = tf.where(positive_roi_bool)[:, 0]
-    # 2. Negative ROIs are those with < 0.5 with every GT box. Skip crowds.
+    # 2. Negative ROIs are those with < 0.5 with every GT box. Skip crowds.给ROI打标签，和GT的iou在0.5以上的为负
     negative_indices = tf.where(tf.logical_and(roi_iou_max < 0.5, no_crowd_bool))[:, 0]
 
     # Subsample ROIs. Aim for 33% positive
     # Positive ROIs
     positive_count = int(config.TRAIN_ROIS_PER_IMAGE *
-                         config.ROI_POSITIVE_RATIO)
-    positive_indices = tf.random_shuffle(positive_indices)[:positive_count]
+                         config.ROI_POSITIVE_RATIO)#正负样本比率
+    positive_indices = tf.random_shuffle(positive_indices)[:positive_count]#打乱，提出正样本索引
     positive_count = tf.shape(positive_indices)[0]
     # Negative ROIs. Add enough to maintain positive:negative ratio.
     r = 1.0 / config.ROI_POSITIVE_RATIO
     negative_count = tf.cast(r * tf.cast(positive_count, tf.float32), tf.int32) - positive_count
-    negative_indices = tf.random_shuffle(negative_indices)[:negative_count]
+    negative_indices = tf.random_shuffle(negative_indices)[:negative_count]#提出负样本索引
     # Gather selected ROIs
-    positive_rois = tf.gather(proposals, positive_indices)
-    negative_rois = tf.gather(proposals, negative_indices)
+    positive_rois = tf.gather(proposals, positive_indices)#提取正样本提议
+    negative_rois = tf.gather(proposals, negative_indices)#提取负样本提议
 
     # Assign positive ROIs to GT boxes.
-    positive_overlaps = tf.gather(overlaps, positive_indices)
+    positive_overlaps = tf.gather(overlaps, positive_indices)#提取正样本的iou
     roi_gt_box_assignment = tf.cond(
         tf.greater(tf.shape(positive_overlaps)[1], 0),
         true_fn = lambda: tf.argmax(positive_overlaps, axis=1),
@@ -571,8 +571,8 @@ def detection_targets_graph(proposals, gt_class_ids, gt_boxes, gt_masks, config)
     roi_gt_class_ids = tf.gather(gt_class_ids, roi_gt_box_assignment)
 
     # Compute bbox refinement for positive ROIs
-    deltas = utils.box_refinement_graph(positive_rois, roi_gt_boxes)
-    deltas /= config.BBOX_STD_DEV
+    deltas = utils.box_refinement_graph(positive_rois, roi_gt_boxes)#计算gt_box和box之间的差距，也就是真实需要预测的偏移
+    deltas /= config.BBOX_STD_DEV#np.array([0.1, 0.1, 0.2, 0.2])
 
     # Assign positive ROIs to GT masks
     # Permute masks to [N, height, width, 1]
@@ -582,7 +582,7 @@ def detection_targets_graph(proposals, gt_class_ids, gt_boxes, gt_masks, config)
 
     # Compute mask targets
     boxes = positive_rois
-    if config.USE_MINI_MASK:
+    if config.USE_MINI_MASK:#调整mask尺寸
         # Transform ROI coordinates from normalized image space
         # to normalized mini-mask space.
         y1, x1, y2, x2 = tf.split(positive_rois, 4, axis=1)
@@ -648,7 +648,7 @@ class DetectionTargetLayer(KE.Layer):
         super(DetectionTargetLayer, self).__init__(**kwargs)
         self.config = config
 
-    def call(self, inputs):
+    def call(self, inputs):#[target_rois, input_gt_class_ids, gt_boxes, input_gt_masks]
         proposals = inputs[0]
         gt_class_ids = inputs[1]
         gt_boxes = inputs[2]
@@ -1941,39 +1941,39 @@ class MaskRCNN():#主函数
 
         # RPN Model
         rpn = build_rpn_model(config.RPN_ANCHOR_STRIDE,
-                              len(config.RPN_ANCHOR_RATIOS), config.TOP_DOWN_PYRAMID_SIZE)#RPN计算结果
+                              len(config.RPN_ANCHOR_RATIOS), config.TOP_DOWN_PYRAMID_SIZE)#RPN计算结果MODEL[rpn_class_logits, rpn_probs, rpn_bbox]
         # Loop through pyramid layers
         layer_outputs = []  # list of lists
         for p in rpn_feature_maps:
-            layer_outputs.append(rpn([p]))
+            layer_outputs.append(rpn([p]))#对所有的P使用RPN网络，结果放入layer_outputs中
         # Concatenate layer outputs
         # Convert from list of lists of level outputs to list of lists
         # of outputs across levels.
-        # e.g. [[a1, b1, c1], [a2, b2, c2]] => [[a1, a2], [b1, b2], [c1, c2]]
+        # e.g. [[a1, b1, c1], [a2, b2, c2]] => [[a1, a2], [b1, b2], [c1, c2]]转换结果
         output_names = ["rpn_class_logits", "rpn_class", "rpn_bbox"]
-        outputs = list(zip(*layer_outputs))
+        outputs = list(zip(*layer_outputs))#将所有特征图生成的物体性和boxes组合
         outputs = [KL.Concatenate(axis=1, name=n)(list(o))
                    for o, n in zip(outputs, output_names)]
 
-        rpn_class_logits, rpn_class, rpn_bbox = outputs
+        rpn_class_logits, rpn_class, rpn_bbox = outputs#将所有特征图生成的物体性和boxes组合
 
         # Generate proposals
         # Proposals are [batch, N, (y1, x1, y2, x2)] in normalized coordinates
-        # and zero padded.
+        # and zero padded.POST_NMS_ROIS_TRAINING=2000训练时候的提议数量，POST_NMS_ROIS_INFERENCE=1000测试时候的提议数量
         proposal_count = config.POST_NMS_ROIS_TRAINING if mode == "training"\
             else config.POST_NMS_ROIS_INFERENCE
         rpn_rois = ProposalLayer(
             proposal_count=proposal_count,
             nms_threshold=config.RPN_NMS_THRESHOLD,
             name="ROI",
-            config=config)([rpn_class, rpn_bbox, anchors])
+            config=config)([rpn_class, rpn_bbox, anchors])#生成的就是由两次筛选剩下的满足要求的RPN,这里依然是标准化的结果
 
         if mode == "training":
             # Class ID mask to mark class IDs supported by the dataset the image
             # came from.
             active_class_ids = KL.Lambda(
                 lambda x: parse_image_meta_graph(x)["active_class_ids"]
-                )(input_image_meta)
+                )(input_image_meta)#解析张量
 
             if not config.USE_RPN_ROIS:
                 # Ignore predicted ROIs and use ROIs provided as an input.
@@ -1985,13 +1985,13 @@ class MaskRCNN():#主函数
             else:
                 target_rois = rpn_rois
 
-            # Generate detection targets
-            # Subsamples proposals and generates target outputs for training
+            # Generate detection targets生成检测目标
+            # Subsamples proposals and generates target outputs for training下采样提议并生成输出
             # Note that proposal class IDs, gt_boxes, and gt_masks are zero
-            # padded. Equally, returned rois and targets are zero padded.
+            # padded. Equally, returned rois and targets are zero padded.生成的类。box和mask都是0pad了，返回目标也是0pad的结果
             rois, target_class_ids, target_bbox, target_mask =\
                 DetectionTargetLayer(config, name="proposal_targets")([
-                    target_rois, input_gt_class_ids, gt_boxes, input_gt_masks])
+                    target_rois, input_gt_class_ids, gt_boxes, input_gt_masks])#检测提议层
 
             # Network Heads
             # TODO: verify that this handles zero padded ROIs
@@ -2775,7 +2775,7 @@ def parse_image_meta(meta):
     }
 
 
-def parse_image_meta_graph(meta):
+def parse_image_meta_graph(meta):#解析张量
     """Parses a tensor that contains image attributes to its components.
     See compose_image_meta() for more details.
 
@@ -2816,7 +2816,7 @@ def unmold_image(normalized_images, config):
 #  Miscellenous Graph Functions
 ############################################################
 
-def trim_zeros_graph(boxes, name='trim_zeros'):
+def trim_zeros_graph(boxes, name='trim_zeros'):#去掉box中用到0pad的部分
     """Often boxes are represented with matrices of shape [N, 4] and
     are padded with zeros. This removes zero boxes.
 
