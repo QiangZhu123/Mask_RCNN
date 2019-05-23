@@ -48,7 +48,7 @@ import urllib.request
 import shutil
 
 # Root directory of the project
-ROOT_DIR = os.path.abspath("../../")
+ROOT_DIR = os.path.abspath("../../")#载入mrcnn的绝对路径
 
 # Import Mask RCNN
 sys.path.append(ROOT_DIR)  # To find local version of the library
@@ -56,7 +56,7 @@ from mrcnn.config import Config
 from mrcnn import model as modellib, utils
 
 # Path to trained weights file
-COCO_MODEL_PATH = os.path.join(ROOT_DIR, "mask_rcnn_coco.h5")
+COCO_MODEL_PATH = os.path.join(ROOT_DIR, "mask_rcnn_coco.h5")#权重路径
 
 # Directory to save logs and model checkpoints, if not provided
 # through the command line argument --logs
@@ -66,7 +66,7 @@ DEFAULT_DATASET_YEAR = "2014"
 ############################################################
 #  Configurations
 ############################################################
-
+#定义训练时的参数
 
 class CocoConfig(Config):
     """Configuration for training on MS COCO.
@@ -84,13 +84,13 @@ class CocoConfig(Config):
     # GPU_COUNT = 8
 
     # Number of classes (including background)
-    NUM_CLASSES = 1 + 80  # COCO has 80 classes
+    NUM_CLASSES = 1 + 80  # COCO has 80 classes 类个数
 
 
 ############################################################
 #  Dataset
 ############################################################
-
+#读入数据
 class CocoDataset(utils.Dataset):
     def load_coco(self, dataset_dir, subset, year=DEFAULT_DATASET_YEAR, class_ids=None,
                   class_map=None, return_coco=False, auto_download=False):
@@ -394,7 +394,7 @@ def evaluate_coco(model, dataset, coco, eval_type="bbox", limit=0, image_ids=Non
 ############################################################
 #  Training
 ############################################################
-
+#主程序
 
 if __name__ == '__main__':
     import argparse
@@ -437,6 +437,7 @@ if __name__ == '__main__':
     print("Auto Download: ", args.download)
 
     # Configurations
+       #参数选择
     if args.command == "train":
         config = CocoConfig()
     else:
@@ -450,6 +451,7 @@ if __name__ == '__main__':
     config.display()
 
     # Create model
+       #生成模型
     if args.command == "train":
         model = modellib.MaskRCNN(mode="training", config=config,
                                   model_dir=args.logs)
@@ -458,6 +460,7 @@ if __name__ == '__main__':
                                   model_dir=args.logs)
 
     # Select weights file to load
+#载入权重
     if args.model.lower() == "coco":
         model_path = COCO_MODEL_PATH
     elif args.model.lower() == "last":
