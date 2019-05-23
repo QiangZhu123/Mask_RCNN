@@ -1817,7 +1817,7 @@ def data_generator(dataset, config, shuffle=True, augment=False, augmentation=No
 #  MaskRCNN Class
 ############################################################
 
-class MaskRCNN():
+class MaskRCNN():#主函数
     """Encapsulates the Mask RCNN model functionality.
 
     The actual Keras model is in the keras_model property.
@@ -1836,7 +1836,7 @@ class MaskRCNN():
         self.set_log_dir()
         self.keras_model = self.build(mode=mode, config=config)
 
-    def build(self, mode, config):
+    def build(self, mode, config):#主方法
         """Build Mask R-CNN architecture.
             input_shape: The shape of the input image.
             mode: Either "training" or "inference". The inputs and
@@ -1845,24 +1845,25 @@ class MaskRCNN():
         assert mode in ['training', 'inference']
 
         # Image size must be dividable by 2 multiple times
-        h, w = config.IMAGE_SHAPE[:2]
-        if h / 2**6 != int(h / 2**6) or w / 2**6 != int(w / 2**6):
+        h, w = config.IMAGE_SHAPE[:2]#图片大小
+        if h / 2**6 != int(h / 2**6) or w / 2**6 != int(w / 2**6):#要求其是32的倍数
             raise Exception("Image size must be dividable by 2 at least 6 times "
                             "to avoid fractions when downscaling and upscaling."
                             "For example, use 256, 320, 384, 448, 512, ... etc. ")
 
         # Inputs
         input_image = KL.Input(
-            shape=[None, None, config.IMAGE_SHAPE[2]], name="input_image")
+            shape=[None, None, config.IMAGE_SHAPE[2]], name="input_image")#[None,None,3]
         input_image_meta = KL.Input(shape=[config.IMAGE_META_SIZE],
-                                    name="input_image_meta")
+                                    name="input_image_meta")#
         if mode == "training":
             # RPN GT
+	#RPN部分的GT输入
             input_rpn_match = KL.Input(
                 shape=[None, 1], name="input_rpn_match", dtype=tf.int32)
             input_rpn_bbox = KL.Input(
                 shape=[None, 4], name="input_rpn_bbox", dtype=tf.float32)
-
+            #对RPN的结果检测的GT输入，分为三个部分，类，box，mask
             # Detection GT (class IDs, bounding boxes, and masks)
             # 1. GT Class IDs (zero padded)
             input_gt_class_ids = KL.Input(
@@ -1887,20 +1888,22 @@ class MaskRCNN():
                     name="input_gt_masks", dtype=bool)
         elif mode == "inference":
             # Anchors in normalized coordinates
+	    #当是推断的时候，计算出来的RPN就直接当作输入
             input_anchors = KL.Input(shape=[None, 4], name="input_anchors")
 
         # Build the shared convolutional layers.
         # Bottom-up Layers
         # Returns a list of the last layers of each stage, 5 in total.
         # Don't create the thead (stage 5), so we pick the 4th item in the list.
-        if callable(config.BACKBONE):
+        if callable(config.BACKBONE):#整个FPN网络的前半部分
             _, C2, C3, C4, C5 = config.BACKBONE(input_image, stage5=True,
                                                 train_bn=config.TRAIN_BN)
-        else:
+        else:#共有四个用于计算的FPN层
             _, C2, C3, C4, C5 = resnet_graph(input_image, config.BACKBONE,
                                              stage5=True, train_bn=config.TRAIN_BN)
         # Top-down Layers
         # TODO: add assert to varify feature map sizes match what's in config
+	 #这里就是计算用于推断的FPN特征图部分，
         P5 = KL.Conv2D(config.TOP_DOWN_PYRAMID_SIZE, (1, 1), name='fpn_c5p5')(C5)
         P4 = KL.Add(name="fpn_p4add")([
             KL.UpSampling2D(size=(2, 2), name="fpn_p5upsampled")(P5),
@@ -1921,12 +1924,13 @@ class MaskRCNN():
         P6 = KL.MaxPooling2D(pool_size=(1, 1), strides=2, name="fpn_p6")(P5)
 
         # Note that P6 is used in RPN, but not in the classifier heads.
+	 #主要结果，网络到此结束
         rpn_feature_maps = [P2, P3, P4, P5, P6]
         mrcnn_feature_maps = [P2, P3, P4, P5]
 
         # Anchors
         if mode == "training":
-            anchors = self.get_anchors(config.IMAGE_SHAPE)
+            anchors = self.get_anchors(config.IMAGE_SHAPE)#根据图片大小获得anchors
             # Duplicate across the batch dimension because Keras requires it
             # TODO: can this be optimized to avoid duplicating the anchors?
             anchors = np.broadcast_to(anchors, (config.BATCH_SIZE,) + anchors.shape)
