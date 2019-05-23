@@ -82,7 +82,7 @@ def compute_backbone_shapes(config, image_shape):#在给定图片输入大小的
     return np.array(
         [[int(math.ceil(image_shape[0] / stride)),
             int(math.ceil(image_shape[1] / stride))]
-            for stride in config.BACKBONE_STRIDES])#用图片大小除以stride得到各个不同层的特征图大小
+            for stride in config.BACKBONE_STRIDES])#用图片大小除以stride得到各个不同层的特征图大小,输出的是相应大小的列表
 
 
 ############################################################
@@ -827,7 +827,7 @@ class DetectionLayer(KE.Layer):
 #  Region Proposal Network (RPN)
 ############################################################
 
-def rpn_graph(feature_map, anchors_per_location, anchor_stride):
+def rpn_graph(feature_map, anchors_per_location, anchor_stride):#（feats,3,1）
     """Builds the computation graph of Region Proposal Network.
 
     feature_map: backbone features [batch, height, width, depth]
@@ -843,35 +843,35 @@ def rpn_graph(feature_map, anchors_per_location, anchor_stride):
     """
     # TODO: check if stride of 2 causes alignment issues if the feature map
     # is not even.
-    # Shared convolutional base of the RPN
+    # Shared convolutional base of the RPN这个是分类和box回归的共享层计算
     shared = KL.Conv2D(512, (3, 3), padding='same', activation='relu',
                        strides=anchor_stride,
-                       name='rpn_conv_shared')(feature_map)
+                       name='rpn_conv_shared')(feature_map)#先对P进行3*3*512卷积，relu激活，anchor_stride就是strides，决定预测anchor的密度
 
     # Anchor Score. [batch, height, width, anchors per location * 2].
     x = KL.Conv2D(2 * anchors_per_location, (1, 1), padding='valid',
-                  activation='linear', name='rpn_class_raw')(shared)
+                  activation='linear', name='rpn_class_raw')(shared)#共享的分类分支，1*1*（2*anchors_per_location）
 
     # Reshape to [batch, anchors, 2]
     rpn_class_logits = KL.Lambda(
-        lambda t: tf.reshape(t, [tf.shape(t)[0], -1, 2]))(x)
+        lambda t: tf.reshape(t, [tf.shape(t)[0], -1, 2]))(x)#logits要[batch, anchors, 2]
 
     # Softmax on last dimension of BG/FG.
     rpn_probs = KL.Activation(
-        "softmax", name="rpn_class_xxx")(rpn_class_logits)
+        "softmax", name="rpn_class_xxx")(rpn_class_logits)#激活层
 
     # Bounding box refinement. [batch, H, W, anchors per location * depth]
     # where depth is [x, y, log(w), log(h)]
     x = KL.Conv2D(anchors_per_location * 4, (1, 1), padding="valid",
-                  activation='linear', name='rpn_bbox_pred')(shared)
+                  activation='linear', name='rpn_bbox_pred')(shared)#box回归层1*1*（4*anchors_per_location）
 
     # Reshape to [batch, anchors, 4]
     rpn_bbox = KL.Lambda(lambda t: tf.reshape(t, [tf.shape(t)[0], -1, 4]))(x)
 
-    return [rpn_class_logits, rpn_probs, rpn_bbox]
+    return [rpn_class_logits, rpn_probs, rpn_bbox]#只有后面两个用于损失计算
 
 
-def build_rpn_model(anchor_stride, anchors_per_location, depth):
+def build_rpn_model(anchor_stride, anchors_per_location, depth):#输入为（1，len([0.5,1,2]),256）RPN网络结构
     """Builds a Keras model of the Region Proposal Network.
     It wraps the RPN graph so it can be used multiple times with shared
     weights.
@@ -888,8 +888,8 @@ def build_rpn_model(anchor_stride, anchors_per_location, depth):
                 applied to anchors.
     """
     input_feature_map = KL.Input(shape=[None, None, depth],
-                                 name="input_rpn_feature_map")
-    outputs = rpn_graph(input_feature_map, anchors_per_location, anchor_stride)
+                                 name="input_rpn_feature_map")#输入是计算完成的[P2,P3,P4,P5],每个通道数是256
+    outputs = rpn_graph(input_feature_map, anchors_per_location, anchor_stride)#单个网络计算，Mask本身是共享分类层计算的
     return KM.Model([input_feature_map], outputs, name="rpn_model")
 
 
@@ -1930,18 +1930,18 @@ class MaskRCNN():#主函数
 
         # Anchors
         if mode == "training":
-            anchors = self.get_anchors(config.IMAGE_SHAPE)#根据图片大小获得anchors
+            anchors = self.get_anchors(config.IMAGE_SHAPE)#根据图片大小获得anchors，字典的形式，每个对应一层特征图所有的anchor{‘（w,h）’:[]}
             # Duplicate across the batch dimension because Keras requires it
             # TODO: can this be optimized to avoid duplicating the anchors?
             anchors = np.broadcast_to(anchors, (config.BATCH_SIZE,) + anchors.shape)
             # A hack to get around Keras's bad support for constants
             anchors = KL.Lambda(lambda x: tf.Variable(anchors), name="anchors")(input_image)
         else:
-            anchors = input_anchors
+            anchors = input_anchors#不是训练模式，不需要生成大量的anchor，而是有RPN生成
 
         # RPN Model
         rpn = build_rpn_model(config.RPN_ANCHOR_STRIDE,
-                              len(config.RPN_ANCHOR_RATIOS), config.TOP_DOWN_PYRAMID_SIZE)
+                              len(config.RPN_ANCHOR_RATIOS), config.TOP_DOWN_PYRAMID_SIZE)#RPN计算结果
         # Loop through pyramid layers
         layer_outputs = []  # list of lists
         for p in rpn_feature_maps:
@@ -2601,7 +2601,7 @@ class MaskRCNN():#主函数
 
     def get_anchors(self, image_shape):
         """Returns anchor pyramid for the given image size."""
-        backbone_shapes = compute_backbone_shapes(self.config, image_shape)
+        backbone_shapes = compute_backbone_shapes(self.config, image_shape)#计算出各个层的特征图大小[[w,h],[w,h]]
         # Cache anchors and reuse if image shape is the same
         if not hasattr(self, "_anchor_cache"):
             self._anchor_cache = {}
@@ -2612,13 +2612,13 @@ class MaskRCNN():#主函数
                 self.config.RPN_ANCHOR_RATIOS,
                 backbone_shapes,
                 self.config.BACKBONE_STRIDES,
-                self.config.RPN_ANCHOR_STRIDE)
+                self.config.RPN_ANCHOR_STRIDE)#根据特征图大小不同生成每层对应的anchor
             # Keep a copy of the latest anchors in pixel coordinates because
             # it's used in inspect_model notebooks.
             # TODO: Remove this after the notebook are refactored to not use it
             self.anchors = a
             # Normalize coordinates
-            self._anchor_cache[tuple(image_shape)] = utils.norm_boxes(a, image_shape[:2])
+            self._anchor_cache[tuple(image_shape)] = utils.norm_boxes(a, image_shape[:2])#标准化后，以字典的形式保存
         return self._anchor_cache[tuple(image_shape)]
 
     def ancestor(self, tensor, name, checked=None):
