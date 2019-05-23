@@ -68,7 +68,7 @@ class BatchNorm(KL.BatchNormalization):
         return super(self.__class__, self).call(inputs, training=training)
 
 
-def compute_backbone_shapes(config, image_shape):
+def compute_backbone_shapes(config, image_shape):#在给定图片输入大小的情况下，计算不同层特征图的大小
     """Computes the width and height of each stage of the backbone network.
 
     Returns:
@@ -82,7 +82,7 @@ def compute_backbone_shapes(config, image_shape):
     return np.array(
         [[int(math.ceil(image_shape[0] / stride)),
             int(math.ceil(image_shape[1] / stride))]
-            for stride in config.BACKBONE_STRIDES])
+            for stride in config.BACKBONE_STRIDES])#用图片大小除以stride得到各个不同层的特征图大小
 
 
 ############################################################
