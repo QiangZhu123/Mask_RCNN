@@ -273,18 +273,18 @@ class ProposalLayer(KE.Layer):#提议处理层
         self.proposal_count = proposal_count#2000
         self.nms_threshold = nms_threshold#0.7
 
-    def call(self, inputs):#输入是[rpn_class, rpn_bbox, anchors]anchors是生成的anchors
+    def call(self, inputs):#输入是[rpn_class, rpn_bbox, anchors]anchors是生成的所有anchors
         # Box Scores. Use the foreground class confidence. [Batch, num_rois, 1]这个是前景，还有背景分数，所以输入是两个，这里只取一个
         scores = inputs[0][:, :, 1]#前景分数
         # Box deltas [batch, num_rois, 4]
         deltas = inputs[1]
-        deltas = deltas * np.reshape(self.config.RPN_BBOX_STD_DEV, [1, 1, 4])
+        deltas = deltas * np.reshape(self.config.RPN_BBOX_STD_DEV, [1, 1, 4])#RPN_BBOX_STD_DEV=np.array([0.1, 0.1, 0.2, 0.2])
         # Anchors
         anchors = inputs[2]
 
         # Improve performance by trimming to top anchors by score
         # and doing the rest on the smaller subset.
-        pre_nms_limit = tf.minimum(self.config.PRE_NMS_LIMIT, tf.shape(anchors)[1])#根据要求看是否有anchors数量的限制
+        pre_nms_limit = tf.minimum(self.config.PRE_NMS_LIMIT, tf.shape(anchors)[1])#根据要求看是否有anchors数量的限制6000
         ix = tf.nn.top_k(scores, pre_nms_limit, sorted=True,
                          name="top_anchors").indices#选出anchors分数中前pre_num_limits个anchors，第一次筛选
         scores = utils.batch_slice([scores, ix], lambda x, y: tf.gather(x, y),
@@ -308,7 +308,7 @@ class ProposalLayer(KE.Layer):#提议处理层
         boxes = utils.batch_slice(boxes,
                                   lambda x: clip_boxes_graph(x, window),
                                   self.config.IMAGES_PER_GPU,
-                                  names=["refined_anchors_clipped"])#用box在图片中裁剪的结果
+                                  names=["refined_anchors_clipped"])#用box在图片中裁剪的结果，就形成ROI
 
         # Filter out small boxes
         # According to Xinlei Chen's paper, this reduces detection accuracy
@@ -1830,11 +1830,11 @@ class MaskRCNN():#主函数
         model_dir: Directory to save training logs and trained weights
         """
         assert mode in ['training', 'inference']
-        self.mode = mode
-        self.config = config
-        self.model_dir = model_dir
+        self.mode = mode#['training', 'inference']
+        self.config = config#所有的模型参数
+        self.model_dir = model_dir#保存模型的路径
         self.set_log_dir()
-        self.keras_model = self.build(mode=mode, config=config)
+        self.keras_model = self.build(mode=mode, config=config)#建立模型
 
     def build(self, mode, config):#主方法
         """Build Mask R-CNN architecture.
@@ -1855,7 +1855,7 @@ class MaskRCNN():#主函数
         input_image = KL.Input(
             shape=[None, None, config.IMAGE_SHAPE[2]], name="input_image")#[None,None,3]
         input_image_meta = KL.Input(shape=[config.IMAGE_META_SIZE],
-                                    name="input_image_meta")#
+                                    name="input_image_meta")# 1 + 3 + 3 + 4 + 1 + self.NUM_CLASSES
         if mode == "training":
             # RPN GT
 	#RPN部分的GT输入
@@ -1874,10 +1874,10 @@ class MaskRCNN():#主函数
                 shape=[None, 4], name="input_gt_boxes", dtype=tf.float32)
             # Normalize coordinates
             gt_boxes = KL.Lambda(lambda x: norm_boxes_graph(
-                x, K.shape(input_image)[1:3]))(input_gt_boxes)
+                x, K.shape(input_image)[1:3]))(input_gt_boxes)#标准化box的坐标
             # 3. GT Masks (zero padded)
             # [batch, height, width, MAX_GT_INSTANCES]
-            if config.USE_MINI_MASK:
+            if config.USE_MINI_MASK:#确定是否要对输入的mask缩放，以减小内存需要
                 input_gt_masks = KL.Input(
                     shape=[config.MINI_MASK_SHAPE[0],
                            config.MINI_MASK_SHAPE[1], None],
@@ -1904,26 +1904,26 @@ class MaskRCNN():#主函数
         # Top-down Layers
         # TODO: add assert to varify feature map sizes match what's in config
 	 #这里就是计算用于推断的FPN特征图部分，
-        P5 = KL.Conv2D(config.TOP_DOWN_PYRAMID_SIZE, (1, 1), name='fpn_c5p5')(C5)
+        P5 = KL.Conv2D(config.TOP_DOWN_PYRAMID_SIZE, (1, 1), name='fpn_c5p5')(C5)#TOP_DOWN_PYRAMID_SIZE=256
         P4 = KL.Add(name="fpn_p4add")([
             KL.UpSampling2D(size=(2, 2), name="fpn_p5upsampled")(P5),
-            KL.Conv2D(config.TOP_DOWN_PYRAMID_SIZE, (1, 1), name='fpn_c4p4')(C4)])
+            KL.Conv2D(config.TOP_DOWN_PYRAMID_SIZE, (1, 1), name='fpn_c4p4')(C4)])#TOP_DOWN_PYRAMID_SIZE=256
         P3 = KL.Add(name="fpn_p3add")([
             KL.UpSampling2D(size=(2, 2), name="fpn_p4upsampled")(P4),
-            KL.Conv2D(config.TOP_DOWN_PYRAMID_SIZE, (1, 1), name='fpn_c3p3')(C3)])
+            KL.Conv2D(config.TOP_DOWN_PYRAMID_SIZE, (1, 1), name='fpn_c3p3')(C3)])#TOP_DOWN_PYRAMID_SIZE=256
         P2 = KL.Add(name="fpn_p2add")([
             KL.UpSampling2D(size=(2, 2), name="fpn_p3upsampled")(P3),
-            KL.Conv2D(config.TOP_DOWN_PYRAMID_SIZE, (1, 1), name='fpn_c2p2')(C2)])
+            KL.Conv2D(config.TOP_DOWN_PYRAMID_SIZE, (1, 1), name='fpn_c2p2')(C2)])#TOP_DOWN_PYRAMID_SIZE=256
         # Attach 3x3 conv to all P layers to get the final feature maps.
-        P2 = KL.Conv2D(config.TOP_DOWN_PYRAMID_SIZE, (3, 3), padding="SAME", name="fpn_p2")(P2)
-        P3 = KL.Conv2D(config.TOP_DOWN_PYRAMID_SIZE, (3, 3), padding="SAME", name="fpn_p3")(P3)
-        P4 = KL.Conv2D(config.TOP_DOWN_PYRAMID_SIZE, (3, 3), padding="SAME", name="fpn_p4")(P4)
-        P5 = KL.Conv2D(config.TOP_DOWN_PYRAMID_SIZE, (3, 3), padding="SAME", name="fpn_p5")(P5)
+        P2 = KL.Conv2D(config.TOP_DOWN_PYRAMID_SIZE, (3, 3), padding="SAME", name="fpn_p2")(P2)#TOP_DOWN_PYRAMID_SIZE=256
+        P3 = KL.Conv2D(config.TOP_DOWN_PYRAMID_SIZE, (3, 3), padding="SAME", name="fpn_p3")(P3)#TOP_DOWN_PYRAMID_SIZE=256
+        P4 = KL.Conv2D(config.TOP_DOWN_PYRAMID_SIZE, (3, 3), padding="SAME", name="fpn_p4")(P4)#TOP_DOWN_PYRAMID_SIZE=256
+        P5 = KL.Conv2D(config.TOP_DOWN_PYRAMID_SIZE, (3, 3), padding="SAME", name="fpn_p5")(P5)#TOP_DOWN_PYRAMID_SIZE=256
         # P6 is used for the 5th anchor scale in RPN. Generated by
         # subsampling from P5 with stride of 2.
         P6 = KL.MaxPooling2D(pool_size=(1, 1), strides=2, name="fpn_p6")(P5)
 
-        # Note that P6 is used in RPN, but not in the classifier heads.
+        # Note that P6 is used in RPN, but not in the classifier heads.P6用于RPN生成，但是不用于分类
 	 #主要结果，网络到此结束
         rpn_feature_maps = [P2, P3, P4, P5, P6]
         mrcnn_feature_maps = [P2, P3, P4, P5]
@@ -1931,9 +1931,10 @@ class MaskRCNN():#主函数
         # Anchors
         if mode == "training":
             anchors = self.get_anchors(config.IMAGE_SHAPE)#根据图片大小获得anchors，字典的形式，每个对应一层特征图所有的anchor{‘（w,h）’:[]}
+		 #这里anchors是标准化后的列表形式
             # Duplicate across the batch dimension because Keras requires it
             # TODO: can this be optimized to avoid duplicating the anchors?
-            anchors = np.broadcast_to(anchors, (config.BATCH_SIZE,) + anchors.shape)
+            anchors = np.broadcast_to(anchors, (config.BATCH_SIZE,) + anchors.shape)#BATCH_SIZE=self.IMAGES_PER_GPU * self.GPU_COUNT
             # A hack to get around Keras's bad support for constants
             anchors = KL.Lambda(lambda x: tf.Variable(anchors), name="anchors")(input_image)
         else:
@@ -1966,14 +1967,14 @@ class MaskRCNN():#主函数
             proposal_count=proposal_count,
             nms_threshold=config.RPN_NMS_THRESHOLD,
             name="ROI",
-            config=config)([rpn_class, rpn_bbox, anchors])#生成的就是由两次筛选剩下的满足要求的RPN,这里依然是标准化的结果
+            config=config)([rpn_class, rpn_bbox, anchors])#生成的就是由两次筛选剩下的满足要求的RPN,这里依然是标准化的结果，但已经加上了delta
 
         if mode == "training":
             # Class ID mask to mark class IDs supported by the dataset the image
             # came from.
             active_class_ids = KL.Lambda(
                 lambda x: parse_image_meta_graph(x)["active_class_ids"]
-                )(input_image_meta)#解析张量
+                )(input_image_meta)#解析标签张量
 
             if not config.USE_RPN_ROIS:
                 # Ignore predicted ROIs and use ROIs provided as an input.
@@ -1981,7 +1982,7 @@ class MaskRCNN():#主函数
                                       name="input_roi", dtype=np.int32)
                 # Normalize coordinates
                 target_rois = KL.Lambda(lambda x: norm_boxes_graph(
-                    x, K.shape(input_image)[1:3]))(input_rois)
+                    x, K.shape(input_image)[1:3]))(input_rois)#标准化输入的roi
             else:
                 target_rois = rpn_rois
 
@@ -2612,13 +2613,13 @@ class MaskRCNN():#主函数
                 self.config.RPN_ANCHOR_RATIOS,
                 backbone_shapes,
                 self.config.BACKBONE_STRIDES,
-                self.config.RPN_ANCHOR_STRIDE)#根据特征图大小不同生成每层对应的anchor
+                self.config.RPN_ANCHOR_STRIDE)#根据特征图大小不同生成每层对应的anchor，形状是（N,4）的列表
             # Keep a copy of the latest anchors in pixel coordinates because
             # it's used in inspect_model notebooks.
             # TODO: Remove this after the notebook are refactored to not use it
-            self.anchors = a
+            self.anchors = a #
             # Normalize coordinates
-            self._anchor_cache[tuple(image_shape)] = utils.norm_boxes(a, image_shape[:2])#标准化后，以字典的形式保存
+            self._anchor_cache[tuple(image_shape)] = utils.norm_boxes(a, image_shape[:2])#标准化后，以字典的形式保存anchors
         return self._anchor_cache[tuple(image_shape)]
 
     def ancestor(self, tensor, name, checked=None):
@@ -2838,7 +2839,7 @@ def batch_pack_graph(x, counts, num_rows):
     return tf.concat(outputs, axis=0)
 
 
-def norm_boxes_graph(boxes, shape):
+def norm_boxes_graph(boxes, shape):#将box的像素坐标进行归一化，这个是对GTbox处理
     """Converts boxes from pixel coordinates to normalized coordinates.
     boxes: [..., (y1, x1, y2, x2)] in pixel coordinates
     shape: [..., (height, width)] in pixels
@@ -2852,7 +2853,7 @@ def norm_boxes_graph(boxes, shape):
     h, w = tf.split(tf.cast(shape, tf.float32), 2)
     scale = tf.concat([h, w, h, w], axis=-1) - tf.constant(1.0)
     shift = tf.constant([0., 0., 1., 1.])
-    return tf.divide(boxes - shift, scale)
+    return tf.divide(boxes - shift, scale)#
 
 
 def denorm_boxes_graph(boxes, shape):
