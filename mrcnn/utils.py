@@ -603,30 +603,30 @@ def generate_anchors(scales, ratios, shape, feature_stride, anchor_stride):#生�
     """
     # Get all combinations of scales and ratios
     scales, ratios = np.meshgrid(np.array(scales), np.array(ratios))
-    scales = scales.flatten()
-    ratios = ratios.flatten()
+    scales = scales.flatten()#array([32, 32, 32])
+    ratios = ratios.flatten()#array([0.5, 1. , 2. ])
 
-    # Enumerate heights and widths from scales and ratios
-    heights = scales / np.sqrt(ratios)
-    widths = scales * np.sqrt(ratios)
+    # Enumerate heights and widths from scales and ratios scales就表示根号h*w，这样生成的宽高比就是ratio
+    heights = scales / np.sqrt(ratios)#array([45.254834, 32.      , 22.627417])
+    widths = scales * np.sqrt(ratios)#array([22.627417, 32.      , 45.254834])
 
     # Enumerate shifts in feature space
-    shifts_y = np.arange(0, shape[0], anchor_stride) * feature_stride
+    shifts_y = np.arange(0, shape[0], anchor_stride) * feature_stride#求每个anchor的坐标位置
     shifts_x = np.arange(0, shape[1], anchor_stride) * feature_stride
-    shifts_x, shifts_y = np.meshgrid(shifts_x, shifts_y)
+    shifts_x, shifts_y = np.meshgrid(shifts_x, shifts_y)#所有anchor点的坐标，计算是根据特征图的大小计算得到，每个点是原图上对应特征图的每个点
 
     # Enumerate combinations of shifts, widths, and heights
     box_widths, box_centers_x = np.meshgrid(widths, shifts_x)
-    box_heights, box_centers_y = np.meshgrid(heights, shifts_y)
+    box_heights, box_centers_y = np.meshgrid(heights, shifts_y)#shape=(256, 3)
 
     # Reshape to get a list of (y, x) and a list of (h, w)
     box_centers = np.stack(
-        [box_centers_y, box_centers_x], axis=2).reshape([-1, 2])
+        [box_centers_y, box_centers_x], axis=2).reshape([-1, 2])#(768, 2)每个点有三个,因为每个点关于这个scales要生成三个ratio的盒子
     box_sizes = np.stack([box_heights, box_widths], axis=2).reshape([-1, 2])
 
     # Convert to corner coordinates (y1, x1, y2, x2)
     boxes = np.concatenate([box_centers - 0.5 * box_sizes,
-                            box_centers + 0.5 * box_sizes], axis=1)
+                            box_centers + 0.5 * box_sizes], axis=1)#shape=(768, 4)
     return boxes
 
 
@@ -635,7 +635,11 @@ def generate_pyramid_anchors(scales, ratios, feature_shapes, feature_strides,
     """Generate anchors at different levels of a feature pyramid. Each scale
     is associated with a level of the pyramid, but each ratio is used in
     all levels of the pyramid.
-
+    scales=(32, 64, 128, 256, 512)
+    ratios=[0.5, 1, 2]
+    feature_shapes=[[h/4,w/4],[h/8,w/8],[h/16,w/16],[h/32,w/32],[h/64,w/64]]
+    feature_strides=[4, 8, 16, 32, 64]
+    anchor_stride=1
     Returns:
     anchors: [N, (y1, x1, y2, x2)]. All generated anchors in one array. Sorted
         with the same order of the given scales. So, anchors of scale[0] come
@@ -646,7 +650,7 @@ def generate_pyramid_anchors(scales, ratios, feature_shapes, feature_strides,
     anchors = []
     for i in range(len(scales)):
         anchors.append(generate_anchors(scales[i], ratios, feature_shapes[i],
-                                        feature_strides[i], anchor_stride))
+                                        feature_strides[i], anchor_stride))#每个scale都要做，但每个scales都对应一个特征图，一个stride
     return np.concatenate(anchors, axis=0)
 
 
@@ -863,17 +867,17 @@ def download_trained_weights(coco_model_path, verbose=1):
 
 def norm_boxes(boxes, shape):
     """Converts boxes from pixel coordinates to normalized coordinates.
-    boxes: [N, (y1, x1, y2, x2)] in pixel coordinates
-    shape: [..., (height, width)] in pixels
+    boxes: [N, (y1, x1, y2, x2)] in pixel coordinates原图坐标和宽高
+    shape: [..., (height, width)] in pixels原图大小
 
     Note: In pixel coordinates (y2, x2) is outside the box. But in normalized
     coordinates it's inside the box.
-
+        标准化坐标都是这么处理的
     Returns:
         [N, (y1, x1, y2, x2)] in normalized coordinates
     """
     h, w = shape
-    scale = np.array([h - 1, w - 1, h - 1, w - 1])
+    scale = np.array([h - 1, w - 1, h - 1, w - 1])#In pixel coordinates (y2, x2) is outside the box. But in normalize coordinates it's inside the box.
     shift = np.array([0, 0, 1, 1])
     return np.divide((boxes - shift), scale).astype(np.float32)
 
