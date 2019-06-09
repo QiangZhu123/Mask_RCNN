@@ -399,7 +399,7 @@ def evaluate_coco(model, dataset, coco, eval_type="bbox", limit=0, image_ids=Non
 if __name__ == '__main__':
     import argparse
 
-    # Parse command line arguments
+    # Parse command line arguments要对命令行输入的命令进行解析
     parser = argparse.ArgumentParser(
         description='Train Mask R-CNN on MS COCO.')
     parser.add_argument("command",
@@ -438,7 +438,7 @@ if __name__ == '__main__':
 
     # Configurations
        #参数选择
-    if args.command == "train":
+    if args.command == "train":#训练和测试时要指定好所有的参数
         config = CocoConfig()
     else:
         class InferenceConfig(CocoConfig):
@@ -460,7 +460,7 @@ if __name__ == '__main__':
                                   model_dir=args.logs)
 
     # Select weights file to load
-#载入权重
+#指定权重参数的路径
     if args.model.lower() == "coco":
         model_path = COCO_MODEL_PATH
     elif args.model.lower() == "last":
@@ -472,7 +472,7 @@ if __name__ == '__main__':
     else:
         model_path = args.model
 
-    # Load weights
+    # Load weights载入权重
     print("Loading weights ", model_path)
     model.load_weights(model_path, by_name=True)
 
@@ -504,7 +504,7 @@ if __name__ == '__main__':
                     learning_rate=config.LEARNING_RATE,
                     epochs=40,
                     layers='heads',
-                    augmentation=augmentation)
+                    augmentation=augmentation)#训练网络头部分
 
         # Training - Stage 2
         # Finetune layers from ResNet stage 4 and up
@@ -513,7 +513,7 @@ if __name__ == '__main__':
                     learning_rate=config.LEARNING_RATE,
                     epochs=120,
                     layers='4+',
-                    augmentation=augmentation)
+                    augmentation=augmentation)#调参4以上部分
 
         # Training - Stage 3
         # Fine tune all layers
@@ -522,9 +522,9 @@ if __name__ == '__main__':
                     learning_rate=config.LEARNING_RATE / 10,
                     epochs=160,
                     layers='all',
-                    augmentation=augmentation)
+                    augmentation=augmentation)#调参所有层
 
-    elif args.command == "evaluate":
+    elif args.command == "evaluate":#如果是评估
         # Validation dataset
         dataset_val = CocoDataset()
         val_type = "val" if args.year in '2017' else "minival"
