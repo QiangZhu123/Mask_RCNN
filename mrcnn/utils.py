@@ -167,12 +167,12 @@ def apply_box_deltas(boxes, deltas):#将deltas加到boxes上，使用计算公�
     width = boxes[:, 3] - boxes[:, 1]
     center_y = boxes[:, 0] + 0.5 * height
     center_x = boxes[:, 1] + 0.5 * width
-    # Apply deltas
+    # Apply deltas计算公式
     center_y += deltas[:, 0] * height
     center_x += deltas[:, 1] * width
     height *= np.exp(deltas[:, 2])
     width *= np.exp(deltas[:, 3])
-    # Convert back to y1, x1, y2, x2
+    # Convert back to y1, x1, y2, x2再将他变成输入的形式
     y1 = center_y - 0.5 * height
     x1 = center_x - 0.5 * width
     y2 = y1 + height
