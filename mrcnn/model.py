@@ -2324,7 +2324,7 @@ class MaskRCNN():#主函数
             "5+": r"(res5.*)|(bn5.*)|(mrcnn\_.*)|(rpn\_.*)|(fpn\_.*)",
             # All layers
             "all": ".*",
-        }
+        }#这里可以按要求来确定需要修改的层是哪些
         if layers in layer_regex.keys():
             layers = layer_regex[layers]
 
