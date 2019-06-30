@@ -1967,7 +1967,7 @@ class MaskRCNN():#主函数
             proposal_count=proposal_count,
             nms_threshold=config.RPN_NMS_THRESHOLD,
             name="ROI",
-            config=config)([rpn_class, rpn_bbox, anchors])#生成的就是由两次筛选剩下的满足要求的RPN,这里依然是标准化的结果，但已经加上了delta
+            config=config)([rpn_class, rpn_bbox, anchors])#生成的就是由两次筛选剩下的满足要求的RPN（6000，NMS）,这里依然是标准化的结果，但已经加上了delta
 
         if mode == "training":
             # Class ID mask to mark class IDs supported by the dataset the image
@@ -1995,13 +1995,14 @@ class MaskRCNN():#主函数
                     target_rois, input_gt_class_ids, gt_boxes, input_gt_masks])#检测提议层
 
             # Network Heads
+                #第二个头结构
             # TODO: verify that this handles zero padded ROIs
             mrcnn_class_logits, mrcnn_class, mrcnn_bbox =\
                 fpn_classifier_graph(rois, mrcnn_feature_maps, input_image_meta,
                                      config.POOL_SIZE, config.NUM_CLASSES,
                                      train_bn=config.TRAIN_BN,
                                      fc_layers_size=config.FPN_CLASSIF_FC_LAYERS_SIZE)
-
+	# 第三个头结构
             mrcnn_mask = build_fpn_mask_graph(rois, mrcnn_feature_maps,
                                               input_image_meta,
                                               config.MASK_POOL_SIZE,
@@ -2613,7 +2614,7 @@ class MaskRCNN():#主函数
                 self.config.RPN_ANCHOR_RATIOS,
                 backbone_shapes,
                 self.config.BACKBONE_STRIDES,
-                self.config.RPN_ANCHOR_STRIDE)#根据特征图大小不同生成每层对应的anchor，形状是（N,4）的列表
+                self.config.RPN_ANCHOR_STRIDE)#根据特征图大小不同生成每层对应的anchor，形状是[（N,4），]*尺度个数的列表
             # Keep a copy of the latest anchors in pixel coordinates because
             # it's used in inspect_model notebooks.
             # TODO: Remove this after the notebook are refactored to not use it
