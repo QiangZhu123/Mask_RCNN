@@ -1629,7 +1629,7 @@ def generate_random_rois(image_shape, count, gt_class_ids, gt_boxes):
 
 def data_generator(dataset, config, shuffle=True, augment=False, augmentation=None,
                    random_rois=0, batch_size=1, detection_targets=False,
-                   no_augmentation_sources=None):
+                   no_augmentation_sources=None):#数据管道生成器，用于fit_generator的使用
     """A generator that returns images and corresponding target class ids,
     bounding box deltas, and masks.
 
@@ -1671,8 +1671,8 @@ def data_generator(dataset, config, shuffle=True, augment=False, augmentation=No
         and masks.
     """
     b = 0  # batch item index
-    image_index = -1
-    image_ids = np.copy(dataset.image_ids)
+    image_index = -1#开始
+    image_ids = np.copy(dataset.image_ids)#复制数据集的索引
     error_count = 0
     no_augmentation_sources = no_augmentation_sources or []
 
@@ -1686,18 +1686,18 @@ def data_generator(dataset, config, shuffle=True, augment=False, augmentation=No
                                              config.RPN_ANCHOR_STRIDE)
 
     # Keras requires a generator to run indefinitely.
-    while True:
+    while True:#无限执行
         try:
             # Increment index to pick next image. Shuffle if at the start of an epoch.
-            image_index = (image_index + 1) % len(image_ids)
-            if shuffle and image_index == 0:
+            image_index = (image_index + 1) % len(image_ids)#保证每次迭代全部的数据
+            if shuffle and image_index == 0:#是否打乱，只在从头开始的时候才使用
                 np.random.shuffle(image_ids)
 
             # Get GT bounding boxes and masks for image.
-            image_id = image_ids[image_index]
+            image_id = image_ids[image_index]#选择图片的索引
 
             # If the image source is not to be augmented pass None as augmentation
-            if dataset.image_info[image_id]['source'] in no_augmentation_sources:
+            if dataset.image_info[image_id]['source'] in no_augmentation_sources:#如果不进行增益则直接加载所有的gt
                 image, image_meta, gt_class_ids, gt_boxes, gt_masks = \
                 load_image_gt(dataset, config, image_id, augment=augment,
                               augmentation=None,
@@ -1706,7 +1706,7 @@ def data_generator(dataset, config, shuffle=True, augment=False, augmentation=No
                 image, image_meta, gt_class_ids, gt_boxes, gt_masks = \
                     load_image_gt(dataset, config, image_id, augment=augment,
                                 augmentation=augmentation,
-                                use_mini_mask=config.USE_MINI_MASK)
+                                use_mini_mask=config.USE_MINI_MASK)#否则进行增益处理
 
             # Skip images that have no instances. This can happen in cases
             # where we train on a subset of classes and the image doesn't
@@ -1716,7 +1716,7 @@ def data_generator(dataset, config, shuffle=True, augment=False, augmentation=No
 
             # RPN Targets
             rpn_match, rpn_bbox = build_rpn_targets(image.shape, anchors,
-                                                    gt_class_ids, gt_boxes, config)
+                                                    gt_class_ids, gt_boxes, config)#使用anchor，gt来制作RPN网络的标签编码
 
             # Mask R-CNN Targets
             if random_rois:
@@ -1725,10 +1725,10 @@ def data_generator(dataset, config, shuffle=True, augment=False, augmentation=No
                 if detection_targets:
                     rois, mrcnn_class_ids, mrcnn_bbox, mrcnn_mask =\
                         build_detection_targets(
-                            rpn_rois, gt_class_ids, gt_boxes, gt_masks, config)
+                            rpn_rois, gt_class_ids, gt_boxes, gt_masks, config)#对MASk 进行标签编码
 
             # Init batch arrays
-            if b == 0:
+            if b == 0:#开始构造一个batch，如果b=0则要先做好各个batch中数据的大小
                 batch_image_meta = np.zeros(
                     (batch_size,) + image_meta.shape, dtype=image_meta.dtype)
                 batch_rpn_match = np.zeros(
@@ -1758,37 +1758,37 @@ def data_generator(dataset, config, shuffle=True, augment=False, augmentation=No
                             (batch_size,) + mrcnn_mask.shape, dtype=mrcnn_mask.dtype)
 
             # If more instances than fits in the array, sub-sample from them.
-            if gt_boxes.shape[0] > config.MAX_GT_INSTANCES:
+            if gt_boxes.shape[0] > config.MAX_GT_INSTANCES:#这里是限制gt的给定个数，如果超过了指定的个数则要进行随机采样
                 ids = np.random.choice(
                     np.arange(gt_boxes.shape[0]), config.MAX_GT_INSTANCES, replace=False)
                 gt_class_ids = gt_class_ids[ids]
                 gt_boxes = gt_boxes[ids]
                 gt_masks = gt_masks[:, :, ids]
 
-            # Add to batch
-            batch_image_meta[b] = image_meta
-            batch_rpn_match[b] = rpn_match[:, np.newaxis]
-            batch_rpn_bbox[b] = rpn_bbox
+            # Add to batch开始将做好的GT放入到相应的batch中
+            batch_image_meta[b] = image_meta#放入image_meta
+            batch_rpn_match[b] = rpn_match[:, np.newaxis]#放入rpn的匹配结果
+            batch_rpn_bbox[b] = rpn_bbox#放入rpnbox
             batch_images[b] = mold_image(image.astype(np.float32), config)
             batch_gt_class_ids[b, :gt_class_ids.shape[0]] = gt_class_ids
             batch_gt_boxes[b, :gt_boxes.shape[0]] = gt_boxes
-            batch_gt_masks[b, :, :, :gt_masks.shape[-1]] = gt_masks
-            if random_rois:
+            batch_gt_masks[b, :, :, :gt_masks.shape[-1]] = gt_masks#放入mask
+            if random_rois:#如果有随机的roi
                 batch_rpn_rois[b] = rpn_rois
                 if detection_targets:
                     batch_rois[b] = rois
                     batch_mrcnn_class_ids[b] = mrcnn_class_ids
                     batch_mrcnn_bbox[b] = mrcnn_bbox
                     batch_mrcnn_mask[b] = mrcnn_mask
-            b += 1
+            b += 1#做完一个要+1
 
             # Batch full?
-            if b >= batch_size:
+            if b >= batch_size:#batch满了
                 inputs = [batch_images, batch_image_meta, batch_rpn_match, batch_rpn_bbox,
-                          batch_gt_class_ids, batch_gt_boxes, batch_gt_masks]
+                          batch_gt_class_ids, batch_gt_boxes, batch_gt_masks]#那么就可以将其合并，进行yeild
                 outputs = []
 
-                if random_rois:
+                if random_rois:#配合随机roi
                     inputs.extend([batch_rpn_rois])
                     if detection_targets:
                         inputs.extend([batch_rois])
@@ -1798,7 +1798,7 @@ def data_generator(dataset, config, shuffle=True, augment=False, augmentation=No
                         outputs.extend(
                             [batch_mrcnn_class_ids, batch_mrcnn_bbox, batch_mrcnn_mask])
 
-                yield inputs, outputs
+                yield inputs, outputs#生成一个
 
                 # start a new batch
                 b = 0
