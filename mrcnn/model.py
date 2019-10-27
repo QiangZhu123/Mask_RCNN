@@ -1184,7 +1184,7 @@ def mrcnn_mask_loss_graph(target_masks, target_class_ids, pred_masks):
 ############################################################
 
 def load_image_gt(dataset, config, image_id, augment=False, augmentation=None,
-                  use_mini_mask=False):
+                  use_mini_mask=False):#对dataset的image_info 进行加载，返回所有需要的GT
     """Load and return ground truth data for an image (image, mask, bounding boxes).
 
     augment: (deprecated. Use augmentation instead). If true, apply random
@@ -1208,20 +1208,20 @@ def load_image_gt(dataset, config, image_id, augment=False, augmentation=None,
         defined in MINI_MASK_SHAPE.
     """
     # Load image and mask
-    image = dataset.load_image(image_id)
-    mask, class_ids = dataset.load_mask(image_id)
-    original_shape = image.shape
+    image = dataset.load_image(image_id)#根据图片的索引载入图片，读取图片
+    mask, class_ids = dataset.load_mask(image_id)#也是根据图片索引载入图片的mask
+    original_shape = image.shape#图片的大小
     image, window, scale, padding, crop = utils.resize_image(
         image,
         min_dim=config.IMAGE_MIN_DIM,
         min_scale=config.IMAGE_MIN_SCALE,
         max_dim=config.IMAGE_MAX_DIM,
-        mode=config.IMAGE_RESIZE_MODE)
-    mask = utils.resize_mask(mask, scale, padding, crop)
+        mode=config.IMAGE_RESIZE_MODE)#对图片进行resize
+    mask = utils.resize_mask(mask, scale, padding, crop)#同时也要对图片进行resize
 
     # Random horizontal flips.
     # TODO: will be removed in a future update in favor of augmentation
-    if augment:
+    if augment:#是否进行增益处理
         logging.warning("'augment' is deprecated. Use 'augmentation' instead.")
         if random.randint(0, 1):
             image = np.fliplr(image)
@@ -1266,7 +1266,7 @@ def load_image_gt(dataset, config, image_id, augment=False, augmentation=None,
     # Bounding boxes. Note that some boxes might be all zeros
     # if the corresponding mask got cropped out.
     # bbox: [num_instances, (y1, x1, y2, x2)]
-    bbox = utils.extract_bboxes(mask)
+    bbox = utils.extract_bboxes(mask)#将mask制作成为boxx
 
     # Active classes
     # Different datasets have different classes, so track the
