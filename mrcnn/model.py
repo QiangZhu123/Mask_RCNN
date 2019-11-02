@@ -2730,7 +2730,7 @@ class MaskRCNN():#主函数
 ############################################################
 
 def compose_image_meta(image_id, original_image_shape, image_shape,
-                       window, scale, active_class_ids):
+                       window, scale, active_class_ids):#将所有的标签全部放到一起构成的一维
     """Takes attributes of an image and puts them in one 1D array.
 
     image_id: An int ID of the image. Useful for debugging.
