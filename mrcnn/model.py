@@ -287,6 +287,7 @@ class ProposalLayer(KE.Layer):#提议处理层
         pre_nms_limit = tf.minimum(self.config.PRE_NMS_LIMIT, tf.shape(anchors)[1])#根据要求看是否有anchors数量的限制6000
         ix = tf.nn.top_k(scores, pre_nms_limit, sorted=True,
                          name="top_anchors").indices#选出anchors分数中前pre_num_limits个anchors，第一次筛选
+	#使用batch_slice是因为ix 是满足条件的ROI，但是数量很多，要把它做成batch大小才能进入下次训练
         scores = utils.batch_slice([scores, ix], lambda x, y: tf.gather(x, y),
                                    self.config.IMAGES_PER_GPU)#这里的batch_slice是对给定的内容使用指定的函数的方法，从scores中提取出第一次筛选结果
         deltas = utils.batch_slice([deltas, ix], lambda x, y: tf.gather(x, y),
@@ -308,7 +309,7 @@ class ProposalLayer(KE.Layer):#提议处理层
         boxes = utils.batch_slice(boxes,
                                   lambda x: clip_boxes_graph(x, window),
                                   self.config.IMAGES_PER_GPU,
-                                  names=["refined_anchors_clipped"])#用box在图片中裁剪的结果，就形成ROI
+                                  names=["refined_anchors_clipped"])#用box在图片中裁剪的结果，将超过边界的的地方都裁剪掉
 
         # Filter out small boxes
         # According to Xinlei Chen's paper, this reduces detection accuracy
