@@ -236,7 +236,7 @@ def box_refinement(box, gt_box):
 #  Dataset
 ############################################################
 
-class Dataset(object):
+class Dataset(object):#构造数据集类
     """The base class for dataset classes.
     To use it, create a new class that adds functions specific to the dataset
     you want to use. For example:
@@ -252,17 +252,17 @@ class Dataset(object):
     See COCODataset and ShapesDataset as examples.
     """
 
-    def __init__(self, class_map=None):
-        self._image_ids = []
-        self.image_info = []
+    def __init__(self, class_map=None):#数据集内均为列表的形式保存
+        self._image_ids = []#[0,1,2,3,4,5,6,7,8,9…………]表示的是图片的编号索引，就是用这个对每个图片进行索引提取
+        self.image_info = []#每个图片的所有信息都放在该列表中，每个图片的信息都保存成字典的格式
         # Background is always the first class
-        self.class_info = [{"source": "", "id": 0, "name": "BG"}]
-        self.source_class_ids = {}
+        self.class_info = [{"source": "", "id": 0, "name": "BG"}]#所有类的信息，每个类也是用字典的形式保存
+        self.source_class_ids = {}#数据集的来源
 
-    def add_class(self, source, class_id, class_name):
+    def add_class(self, source, class_id, class_name#添加一个新类到类信息列表中
         assert "." not in source, "Source name cannot contain a dot"
         # Does the class exist already?
-        for info in self.class_info:
+        for info in self.class_info:#保证的是新的类是没有出现过的，不然就直接跳过
             if info['source'] == source and info["id"] == class_id:
                 # source.class_id combination already available, skip
                 return
@@ -271,16 +271,16 @@ class Dataset(object):
             "source": source,
             "id": class_id,
             "name": class_name,
-        })
+        })#如果是新的类，就将它以字典的形式放入到类列表中保存
 
-    def add_image(self, source, image_id, path, **kwargs):
+    def add_image(self, source, image_id, path, **kwargs):#添加一张图的所有信息到类总
         image_info = {
             "id": image_id,
             "source": source,
             "path": path,
-        }
-        image_info.update(kwargs)
-        self.image_info.append(image_info)
+        }#一张图的所有信息都是用一个字典进行保存，包括id,source,path,等
+        image_info.update(kwargs)#其他的图片的信息一并更新到该字典中
+        self.image_info.append(image_info)#将该字典添加到所有图片的列表中
 
     def image_reference(self, image_id):
         """Return a link to the image in its source Website or details about
@@ -291,23 +291,23 @@ class Dataset(object):
         """
         return ""
 
-    def prepare(self, class_map=None):
+    def prepare(self, class_map=None):#主函数，调用后将整个数据集调整准备好
         """Prepares the Dataset class for use.
 
         TODO: class map is not supported yet. When done, it should handle mapping
               classes from different datasets to the same class ID.
         """
 
-        def clean_name(name):
+        def clean_name(name):#处理文件名
             """Returns a shorter version of object names for cleaner display."""
             return ",".join(name.split(",")[:1])
 
         # Build (or rebuild) everything else from the info dicts.
-        self.num_classes = len(self.class_info)
-        self.class_ids = np.arange(self.num_classes)
-        self.class_names = [clean_name(c["name"]) for c in self.class_info]
-        self.num_images = len(self.image_info)
-        self._image_ids = np.arange(self.num_images)
+        self.num_classes = len(self.class_info#类的数量
+        self.class_ids = np.arange(self.num_classes)#对类进行数字编号
+        self.class_names = [clean_name(c["name"]) for c in self.class_info]#类名称列表
+        self.num_images = len(self.image_info)#多少张图片
+        self._image_ids = np.arange(self.num_images)#对图片生成索引编号
 
         # Mapping from source class and image IDs to internal IDs
         self.class_from_source_map = {"{}.{}".format(info['source'], info['id']): id
@@ -316,11 +316,11 @@ class Dataset(object):
                                       for info, id in zip(self.image_info, self.image_ids)}
 
         # Map sources to class_ids they support
-        self.sources = list(set([i['source'] for i in self.class_info]))
-        self.source_class_ids = {}
+        self.sources = list(set([i['source'] for i in self.class_info]))#所有数据的来源
+        self.source_class_ids = {}#对类进行编码
         # Loop over datasets
-        for source in self.sources:
-            self.source_class_ids[source] = []
+        for source in self.sources:#将每个数据源都配上其包含类的编码
+            self.source_class_ids[source] = []#每个源都用一个列表保存
             # Find classes that belong to this dataset
             for i, info in enumerate(self.class_info):
                 # Include BG class in all datasets
@@ -342,21 +342,21 @@ class Dataset(object):
         return info['id']
 
     @property
-    def image_ids(self):
+    def image_ids(self):#返回所有图片的索引
         return self._image_ids
 
-    def source_image_link(self, image_id):
+    def source_image_link(self, image_id):#返回给定索引的图片路径
         """Returns the path or URL to the image.
         Override this to return a URL to the image if it's available online for easy
         debugging.
         """
         return self.image_info[image_id]["path"]
 
-    def load_image(self, image_id):
+    def load_image(self, image_id):#给定图片索引，对该图片进行加载
         """Load the specified image and return a [H,W,3] Numpy array.
         """
         # Load image
-        image = skimage.io.imread(self.image_info[image_id]['path'])
+        image = skimage.io.imread(self.image_info[image_id]['path'])#根据索引选定图片信息，选出路径，读取图片
         # If grayscale. Convert to RGB for consistency.
         if image.ndim != 3:
             image = skimage.color.gray2rgb(image)
@@ -365,7 +365,7 @@ class Dataset(object):
             image = image[..., :3]
         return image
 
-    def load_mask(self, image_id):
+    def load_mask(self, image_id):#读取图片的mask
         """Load instance masks for the given image.
 
         Different datasets use different ways to store masks. Override this
@@ -380,12 +380,12 @@ class Dataset(object):
         # Override this function to load a mask from your dataset.
         # Otherwise, it returns an empty mask.
         logging.warning("You are using the default load_mask(), maybe you need to define your own one.")
-        mask = np.empty([0, 0, 0])
+        mask = np.empty([0, 0, 0])#先设置一个随机的mask
         class_ids = np.empty([0], np.int32)
         return mask, class_ids
 
 
-def resize_image(image, min_dim=None, max_dim=None, min_scale=None, mode="square"):
+def resize_image(image, min_dim=None, max_dim=None, min_scale=None, mode="square"):#对图片进行resize
     """Resizes an image keeping the aspect ratio unchanged.
 
     min_dim: if provided, resizes the image such that it's smaller
@@ -426,11 +426,11 @@ def resize_image(image, min_dim=None, max_dim=None, min_scale=None, mode="square
     padding = [(0, 0), (0, 0), (0, 0)]
     crop = None
 
-    if mode == "none":
+    if mode == "none":#如果不处理，就之间返回
         return image, window, scale, padding, crop
 
     # Scale?
-    if min_dim:
+    if min_dim:#
         # Scale up but not down
         scale = max(1, min_dim / min(h, w))
     if min_scale and scale < min_scale:
@@ -492,7 +492,7 @@ def resize_image(image, min_dim=None, max_dim=None, min_scale=None, mode="square
     return image.astype(image_dtype), window, scale, padding, crop
 
 
-def resize_mask(mask, scale, padding, crop=None):
+def resize_mask(mask, scale, padding, crop=None):#将图片也进行resize
     """Resizes a mask using the given scale and padding.
     Typically, you get the scale and padding from resize_image() to
     ensure both, the image and the mask, are resized consistently.
