@@ -91,11 +91,11 @@ class CocoConfig(Config):
 #  Dataset
 ############################################################
 #读入数据
-class CocoDataset(utils.Dataset):
+class CocoDataset(utils.Dataset):#根据不同的数据集来构造一个数据类
     def load_coco(self, dataset_dir, subset, year=DEFAULT_DATASET_YEAR, class_ids=None,
                   class_map=None, return_coco=False, auto_download=False):
         """Load a subset of the COCO dataset.
-        dataset_dir: The root directory of the COCO dataset.
+        dataset_dir: The root directory of the COCO dataset.数据集的根目录
         subset: What to load (train, val, minival, valminusminival)
         year: What dataset year to load (2014, 2017) as a string, not an integer
         class_ids: If provided, only loads images that have the given classes.
@@ -105,13 +105,13 @@ class CocoDataset(utils.Dataset):
         auto_download: Automatically download and unzip MS-COCO images and annotations
         """
 
-        if auto_download is True:
+        if auto_download is True:#是否自动下载
             self.auto_download(dataset_dir, subset, year)
 
         coco = COCO("{}/annotations/instances_{}{}.json".format(dataset_dir, subset, year))
         if subset == "minival" or subset == "valminusminival":
             subset = "val"
-        image_dir = "{}/{}{}".format(dataset_dir, subset, year)
+        image_dir = "{}/{}{}".format(dataset_dir, subset, year)#图片路径
 
         # Load all classes or a subset?
         if not class_ids:
@@ -131,7 +131,7 @@ class CocoDataset(utils.Dataset):
 
         # Add classes
         for i in class_ids:
-            self.add_class("coco", i, coco.loadCats(i)[0]["name"])
+            self.add_class("coco", i, coco.loadCats(i)[0]["name"])#添加类的信息到类列表中
 
         # Add images
         for i in image_ids:
@@ -141,11 +141,11 @@ class CocoDataset(utils.Dataset):
                 width=coco.imgs[i]["width"],
                 height=coco.imgs[i]["height"],
                 annotations=coco.loadAnns(coco.getAnnIds(
-                    imgIds=[i], catIds=class_ids, iscrowd=None)))
+                    imgIds=[i], catIds=class_ids, iscrowd=None)))#添加图片的数据信息到列表中
         if return_coco:
             return coco
 
-    def auto_download(self, dataDir, dataType, dataYear):
+    def auto_download(self, dataDir, dataType, dataYear):#这个是自动下载数据集的函数
         """Download the COCO dataset/annotations if requested.
         dataDir: The root directory of the COCO dataset.
         dataType: What to load (train, val, minival, valminusminival)
@@ -217,7 +217,7 @@ class CocoDataset(utils.Dataset):
             print("... done unzipping")
         print("Will use annotations in " + annFile)
 
-    def load_mask(self, image_id):
+    def load_mask(self, image_id):#重写mask的载入方式
         """Load instance masks for the given image.
 
         Different datasets use different ways to store masks. This
@@ -230,7 +230,7 @@ class CocoDataset(utils.Dataset):
         class_ids: a 1D array of class IDs of the instance masks.
         """
         # If not a COCO image, delegate to parent class.
-        image_info = self.image_info[image_id]
+        image_info = self.image_info[image_id]#根据给定的索引来选中图片的信息
         if image_info["source"] != "coco":
             return super(CocoDataset, self).load_mask(image_id)
 
