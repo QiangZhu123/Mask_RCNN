@@ -35,7 +35,7 @@ assert LooseVersion(keras.__version__) >= LooseVersion('2.0.8')
 #  Utility Functions
 ############################################################
 
-def log(text, array=None):
+def log(text, array=None):#打印相关的信息
     """Prints a text message. And, optionally, if a Numpy array is provided it
     prints it's shape, min, and max values.
     """
@@ -50,7 +50,7 @@ def log(text, array=None):
     print(text)
 
 
-class BatchNorm(KL.BatchNormalization):
+class BatchNorm(KL.BatchNormalization):#对BN层进行继承
     """Extends the Keras BatchNormalization class to allow a central place
     to make changes if needed.
 
@@ -95,7 +95,7 @@ def compute_backbone_shapes(config, image_shape):#在给定图片输入大小的
 def identity_block(input_tensor, kernel_size, filters, stage, block,
                    use_bias=True, train_bn=True):
     """The identity_block is the block that has no conv layer at shortcut
-    # Arguments
+    # Arguments这个是一个瓶颈残差层 1*1 接3*3 接1*1，resnet，  注意，这里的残差是没有处理的，所以是identity，区别于下面的有conv处理的
         input_tensor: input tensor
         kernel_size: default 3, the kernel size of middle conv layer at main path
         filters: list of integers, the nb_filters of 3 conv layer at main path
@@ -130,7 +130,7 @@ def identity_block(input_tensor, kernel_size, filters, stage, block,
 def conv_block(input_tensor, kernel_size, filters, stage, block,
                strides=(2, 2), use_bias=True, train_bn=True):
     """conv_block is the block that has a conv layer at shortcut
-    # Arguments
+    # Arguments这个也是残差模块，只不过区别于上面的直接相加，它要有一个conv处理残差路径
         input_tensor: input tensor
         kernel_size: default 3, the kernel size of middle conv layer at main path
         filters: list of integers, the nb_filters of 3 conv layer at main path
@@ -160,7 +160,7 @@ def conv_block(input_tensor, kernel_size, filters, stage, block,
     x = BatchNorm(name=bn_name_base + '2c')(x, training=train_bn)
 
     shortcut = KL.Conv2D(nb_filter3, (1, 1), strides=strides,
-                         name=conv_name_base + '1', use_bias=use_bias)(input_tensor)
+                         name=conv_name_base + '1', use_bias=use_bias)(input_tensor)#用一个1*1处理残差路径后，再相加
     shortcut = BatchNorm(name=bn_name_base + '1')(shortcut, training=train_bn)
 
     x = KL.Add()([x, shortcut])
@@ -176,20 +176,20 @@ def resnet_graph(input_image, architecture, stage5=False, train_bn=True):
     """
     assert architecture in ["resnet50", "resnet101"]
     # Stage 1
-    x = KL.ZeroPadding2D((3, 3))(input_image)
-    x = KL.Conv2D(64, (7, 7), strides=(2, 2), name='conv1', use_bias=True)(x)
+    x = KL.ZeroPadding2D((3, 3))(input_image)#对输入进行补齐
+    x = KL.Conv2D(64, (7, 7), strides=(2, 2), name='conv1', use_bias=True)(x)#最初的是一个7*7大的卷积层
     x = BatchNorm(name='bn_conv1')(x, training=train_bn)
     x = KL.Activation('relu')(x)
-    C1 = x = KL.MaxPooling2D((3, 3), strides=(2, 2), padding="same")(x)
-    # Stage 2
+    C1 = x = KL.MaxPooling2D((3, 3), strides=(2, 2), padding="same")(x)#3*3，s=2的最大池化层
+    # Stage 2 是3个残差模块组成
     x = conv_block(x, 3, [64, 64, 256], stage=2, block='a', strides=(1, 1), train_bn=train_bn)
     x = identity_block(x, 3, [64, 64, 256], stage=2, block='b', train_bn=train_bn)
-    C2 = x = identity_block(x, 3, [64, 64, 256], stage=2, block='c', train_bn=train_bn)
-    # Stage 3
+    C2 = x = identity_block(x, 3, [64, 64, 256], stage=2, block='c', train_bn=train_bn)#特征层
+    # Stage 3 是4个残差模块组成
     x = conv_block(x, 3, [128, 128, 512], stage=3, block='a', train_bn=train_bn)
     x = identity_block(x, 3, [128, 128, 512], stage=3, block='b', train_bn=train_bn)
     x = identity_block(x, 3, [128, 128, 512], stage=3, block='c', train_bn=train_bn)
-    C3 = x = identity_block(x, 3, [128, 128, 512], stage=3, block='d', train_bn=train_bn)
+    C3 = x = identity_block(x, 3, [128, 128, 512], stage=3, block='d', train_bn=train_bn)#特征层
     # Stage 4
     x = conv_block(x, 3, [256, 256, 1024], stage=4, block='a', train_bn=train_bn)
     block_count = {"resnet50": 5, "resnet101": 22}[architecture]
@@ -210,27 +210,27 @@ def resnet_graph(input_image, architecture, stage5=False, train_bn=True):
 #  Proposal Layer
 ############################################################
 
-def apply_box_deltas_graph(boxes, deltas):
+def apply_box_deltas_graph(boxes, deltas):#将网络计算出的delta对anchor使用，得到预测所得的boxes
     """Applies the given deltas to the given boxes.
     boxes: [N, (y1, x1, y2, x2)] boxes to update
     deltas: [N, (dy, dx, log(dh), log(dw))] refinements to apply
     """
-    # Convert to y, x, h, w
+    # Convert to y, x, h, w 先要将box的格式转化为[y,x,w,h]
     height = boxes[:, 2] - boxes[:, 0]
     width = boxes[:, 3] - boxes[:, 1]
     center_y = boxes[:, 0] + 0.5 * height
     center_x = boxes[:, 1] + 0.5 * width
-    # Apply deltas
+    # Apply deltas 将deltas分别针对使用
     center_y += deltas[:, 0] * height
     center_x += deltas[:, 1] * width
     height *= tf.exp(deltas[:, 2])
     width *= tf.exp(deltas[:, 3])
-    # Convert back to y1, x1, y2, x2
+    # Convert back to y1, x1, y2, x2再将其转化回去
     y1 = center_y - 0.5 * height
     x1 = center_x - 0.5 * width
     y2 = y1 + height
     x2 = x1 + width
-    result = tf.stack([y1, x1, y2, x2], axis=1, name="apply_box_deltas_out")
+    result = tf.stack([y1, x1, y2, x2], axis=1, name="apply_box_deltas_out")#重新构成和输入一样的格式
     return result
 
 
@@ -239,7 +239,7 @@ def clip_boxes_graph(boxes, window):#window=[0,0,1,1],window就是图片的标�
     boxes: [N, (y1, x1, y2, x2)]
     window: [4] in the form y1, x1, y2, x2
     """
-    # Split
+    # Split取出对应的列值
     wy1, wx1, wy2, wx2 = tf.split(window, 4)
     y1, x1, y2, x2 = tf.split(boxes, 4, axis=1)
     # Clip
@@ -342,7 +342,7 @@ def log2_graph(x):
     return tf.log(x) / tf.log(2.0)
 
 
-class PyramidROIAlign(KE.Layer):
+class PyramidROIAlign(KE.Layer):#ROI的实现
     """Implements ROI Pooling on multiple levels of the feature pyramid.
 
     Params:
@@ -378,33 +378,33 @@ class PyramidROIAlign(KE.Layer):
         # feature pyramid. Each is [batch, height, width, channels]
         feature_maps = inputs[2:]
 
-        # Assign each ROI to a level in the pyramid based on the ROI area.
-        y1, x1, y2, x2 = tf.split(boxes, 4, axis=2)
+        # Assign each ROI to a level in the pyramid based on the ROI area.根据ROI的大小来分配给相应的feature map
+        y1, x1, y2, x2 = tf.split(boxes, 4, axis=2)#将boxes拆解，求出相应的w,h
         h = y2 - y1
         w = x2 - x1
         # Use shape of first image. Images in a batch must have the same size.
-        image_shape = parse_image_meta_graph(image_meta)['image_shape'][0]
+        image_shape = parse_image_meta_graph(image_meta)['image_shape'][0]#图片大小
         # Equation 1 in the Feature Pyramid Networks paper. Account for
         # the fact that our coordinates are normalized here.
         # e.g. a 224x224 ROI (in pixels) maps to P4
-        image_area = tf.cast(image_shape[0] * image_shape[1], tf.float32)
-        roi_level = log2_graph(tf.sqrt(h * w) / (224.0 / tf.sqrt(image_area)))
+        image_area = tf.cast(image_shape[0] * image_shape[1], tf.float32)#求出图片面积
+        roi_level = log2_graph(tf.sqrt(h * w) / (224.0 / tf.sqrt(image_area)))#根据scale=h*w来确定每个boxes所属的特征层
         roi_level = tf.minimum(5, tf.maximum(
-            2, 4 + tf.cast(tf.round(roi_level), tf.int32)))
+            2, 4 + tf.cast(tf.round(roi_level), tf.int32)))#整数化层数
         roi_level = tf.squeeze(roi_level, 2)
 
-        # Loop through levels and apply ROI pooling to each. P2 to P5.
+        # Loop through levels and apply ROI pooling to each. P2 to P5.roi_level=[2,4,3,5,2,2,5,4,3,4,5,3,2,4,2,3,4,5,...]
         pooled = []
         box_to_level = []
         for i, level in enumerate(range(2, 6)):
-            ix = tf.where(tf.equal(roi_level, level))
-            level_boxes = tf.gather_nd(boxes, ix)
+            ix = tf.where(tf.equal(roi_level, level))#筛选出所有在level层上的boxes[2,3,1,13,53,1,2,3,4,3,...]
+            level_boxes = tf.gather_nd(boxes, ix)#提取出
 
             # Box indices for crop_and_resize.
             box_indices = tf.cast(ix[:, 0], tf.int32)
 
             # Keep track of which box is mapped to which level
-            box_to_level.append(ix)
+            box_to_level.append(ix)#每层特征包含的boxes的index放入一个列表中
 
             # Stop gradient propogation to ROI proposals
             level_boxes = tf.stop_gradient(level_boxes)
@@ -416,19 +416,20 @@ class PyramidROIAlign(KE.Layer):
             # interpolating only a single value at each bin center (without
             # pooling) is nearly as effective."
             #
-            # Here we use the simplified approach of a single value per bin,
-            # which is how it's done in tf.crop_and_resize()
+            # Here we use the simplified approach of a single value per bin,只是用了简单的裁剪，并不是RoIAlign
+            # which is how it's done in tf.crop_and_resize()就是用这个函数实现的池化
             # Result: [batch * num_boxes, pool_height, pool_width, channels]
             pooled.append(tf.image.crop_and_resize(
                 feature_maps[i], level_boxes, box_indices, self.pool_shape,
                 method="bilinear"))
 
-        # Pack pooled features into one tensor
-        pooled = tf.concat(pooled, axis=0)
+        # Pack pooled features into one tensor将池化特征转化成一个张量,根据上面的输出是[batch * num_boxes, pool_height, pool_width, channels]
+        #那么concat成的就是一个[h,w,c*n]的张量
+	pooled = tf.concat(pooled, axis=0)
 
         # Pack box_to_level mapping into one array and add another
         # column representing the order of pooled boxes
-        box_to_level = tf.concat(box_to_level, axis=0)
+        box_to_level = tf.concat(box_to_level, axis=0)#又是一个一维的张量
         box_range = tf.expand_dims(tf.range(tf.shape(box_to_level)[0]), 1)
         box_to_level = tf.concat([tf.cast(box_to_level, tf.int32), box_range],
                                  axis=1)
